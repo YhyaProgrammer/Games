@@ -60,6 +60,7 @@ class ChessGame:
         
         self.animating_move = None 
         self.undo_stack_count = 0
+        self.sound_enabled = True
 
         # --- Sounds (Synthesized) ---
         self.sounds = self.create_sounds()
@@ -104,7 +105,7 @@ class ChessGame:
         return sounds
 
     def play_sound(self, name):
-        if name in self.sounds:
+        if self.sound_enabled and name in self.sounds:
             self.sounds[name].play()
 
     def reset_game(self):
@@ -332,7 +333,10 @@ class ChessGame:
             ks = self.board.king(self.board.turn)
             if ks:
                 x, y = self.get_square_center(ks)
-                pygame.draw.rect(self.screen, (255, 0, 0, 100), (x - 24, y - 24, 48, 48), 3)
+                pygame.draw.rect(self.screen, (255, 0, 0, 100), (x - 30, y - 30, 60, 60), 3)
+                # Pulse "CHECK!" text
+                alpha = int(127 + 127 * abs(pygame.time.get_ticks() % 1000 - 500) / 500)
+                self.draw_text_centered("CHECK!", self.font_menu, (255, 50, 50), WIDTH // 2, OFFSET_Y // 2)
 
         # Move Hints and Undos UP (near timers)
         self.draw_text_centered(f"Hints: {self.hints_left}", self.font_small, theme["text"], 80, 55)
@@ -343,14 +347,17 @@ class ChessGame:
             self.draw_text_centered(f"B: {int(self.black_time//60):02}:{int(self.black_time%60):02}", self.font_small, theme["text"], 80, 25)
             self.draw_text_centered(f"W: {int(self.white_time//60):02}:{int(self.white_time%60):02}", self.font_small, theme["text"], WIDTH - 80, 25)
 
-        # Buttons - Adjusted width and spacing to avoid cutoff
+        # Buttons - 5 buttons now
         mouse_pos = pygame.mouse.get_pos()
-        btns = [("Resign", 70, 90), ("Hint", 185, 90), ("Theme", 315, 90), ("Undo", 430, 90)]
+        sound_text = "Sound: On" if self.sound_enabled else "Sound: Off"
+        # Adjusted positions to fit 5 buttons
+        btns = [("Menu", 55, 80), ("Hint", 150, 80), ("Theme", 250, 80), (sound_text, 350, 80), ("Undo", 445, 80)]
         for text, cx, w in btns:
             rect = pygame.Rect(cx - w // 2, HEIGHT - 55, w, 40)
             color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
             pygame.draw.rect(self.screen, color, rect, border_radius=10)
-            self.draw_text_centered(text, self.font_small, COLOR_TEXT_WHITE, cx, HEIGHT - 35)
+            # Use smaller font for buttons if needed
+            self.draw_text_centered(text, pygame.font.SysFont("segoe ui", 16), COLOR_TEXT_WHITE, cx, HEIGHT - 35)
             
         if self.dragging and self.selected_square:
             piece = self.board.piece_at(self.selected_square)
@@ -360,9 +367,25 @@ class ChessGame:
         if self.game_over:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             s.fill((0, 0, 0, 220)); self.screen.blit(s, (0,0))
-            self.draw_text_centered("GAME OVER", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 80)
-            self.draw_text_centered(f"Rounds: {len(self.board.move_stack)//2}", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2)
-            self.draw_text_centered("Press R to Restart", self.font_small, (200, 200, 200), WIDTH // 2, HEIGHT // 2 + 80)
+            self.draw_text_centered("GAME OVER", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 100)
+            reason = "Reason Unknown"
+            if self.board.is_checkmate(): reason = "Checkmate!"
+            elif self.board.is_stalemate(): reason = "Stalemate!"
+            elif self.board.is_insufficient_material(): reason = "Insufficient Material"
+            elif self.board.is_fivefold_repetition(): reason = "Repetition"
+            elif self.winner: reason = self.winner # For resignation/timeout
+            
+            self.draw_text_centered(reason, self.font_menu, (255, 255, 0), WIDTH // 2, HEIGHT // 2 - 40)
+            self.draw_text_centered(f"Rounds: {len(self.board.move_stack)//2}", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 20)
+            
+            # Interactive Restart Button
+            restart_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 50)
+            color = COLOR_BUTTON_HOVER if restart_rect.collidepoint(mouse_pos) else COLOR_BUTTON
+            pygame.draw.rect(self.screen, color, restart_rect, border_radius=12)
+            self.draw_text_centered("PLAY AGAIN", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 85)
+            
+            if pygame.mouse.get_pressed()[0] and restart_rect.collidepoint(mouse_pos):
+                self.reset_game()
 
     def run(self):
         in_menu = True
@@ -384,20 +407,23 @@ class ChessGame:
                 if not self.game_over and self.animating_move is None and self.undo_stack_count == 0:
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         pos = pygame.mouse.get_pos()
-                        # UI Click handle - Updated to match draw_game positions
+                        # UI Click handle
                         if pos[1] > HEIGHT - 60:
-                            # Resign (cx=70, w=90) -> 25 - 115
-                            if 25 < pos[0] < 115: 
+                            # Menu (cx=55, w=80)
+                            if 15 < pos[0] < 95: 
                                 self.game_over = True; self.winner = "Resigned"; self.play_sound('click')
-                            # Hint (cx=185, w=90) -> 140 - 230
-                            elif 140 < pos[0] < 230 and self.hints_left > 0:
+                            # Hint (cx=150, w=80) 
+                            elif 110 < pos[0] < 190 and self.hints_left > 0:
                                 self.hints_left -= 1; self.hint_move = self.ai.get_move(self.board) if self.ai else None; self.play_sound('click')
-                            # Theme (cx=315, w=90) -> 270 - 360
-                            elif 270 < pos[0] < 360:
+                            # Theme (cx=250, w=80)
+                            elif 210 < pos[0] < 290:
                                 self.current_theme_idx = (self.current_theme_idx + 1) % len(self.theme_order)
                                 self.current_theme = self.themes[self.theme_order[self.current_theme_idx]]; self.play_sound('click')
-                            # Undo (cx=430, w=90) -> 385 - 475
-                            elif 385 < pos[0] < 475 and self.undos_left > 0:
+                            # Sound (cx=350, w=80)
+                            elif 310 < pos[0] < 390:
+                                self.sound_enabled = not self.sound_enabled; self.play_sound('click')
+                            # Undo (cx=445, w=80)
+                            elif 405 < pos[0] < 485 and self.undos_left > 0:
                                 self.undos_left -= 1; self.undo_stack_count = 2 if self.ai else 1; self.trigger_next_undo(); self.play_sound('click')
                             continue
                         sq = self.get_square_from_mouse(pos)
@@ -419,18 +445,27 @@ class ChessGame:
                             move = next((m for m in self.legal_moves if m.to_square == sq), None)
                             if move:
                                 if move.promotion: move.promotion = chess.QUEEN
-                                self.play_sound('move'); self.board.push(move)
+                                self.board.push(move)
+                                if self.board.is_checkmate(): self.game_over = True
+                                elif self.board.is_check(): self.play_sound('check')
+                                elif self.board.is_capture(move): self.play_sound('capture')
+                                else: self.play_sound('move')
+                                if self.board.is_game_over(): self.game_over = True
                         self.selected_square = None; self.dragging = False; self.legal_moves = []
             
             if self.animating_move:
                 m, st, d, sym, col, undo = self.animating_move
                 if pygame.time.get_ticks() - st >= d:
                     self.animating_move = None
-                    if undo: self.trigger_next_undo()
-                    else: 
-                        if self.board.is_capture(m): self.play_sound('capture')
-                        else: self.play_sound('move')
+                    if undo:
+                        self.trigger_next_undo()
+                    else:
                         self.board.push(m)
+                        if self.board.is_checkmate(): self.game_over = True
+                        elif self.board.is_check(): self.play_sound('check')
+                        elif self.board.is_capture(m): self.play_sound('capture')
+                        else: self.play_sound('move')
+                        if self.board.is_game_over(): self.game_over = True
             elif not self.game_over and self.ai and self.board.turn != self.player_color:
                 if ai_thinking_start is None: ai_thinking_start = pygame.time.get_ticks()
                 if pygame.time.get_ticks() - ai_thinking_start >= 500:

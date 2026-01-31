@@ -31,7 +31,7 @@ class ChessGame:
         pygame.mixer.init()
         
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Antigravity Chess")
+        pygame.display.set_caption("Chess Bot")
         self.clock = pygame.time.Clock()
         self.font_large = pygame.font.SysFont("segoe ui symbol", 40)
         self.font_small = pygame.font.SysFont("segoe ui", 20)
@@ -61,6 +61,15 @@ class ChessGame:
         self.animating_move = None 
         self.undo_stack_count = 0
         self.sound_enabled = True
+        self.menu_transition_time = None
+        self.undo_msg_time = 0
+        self.friend_resign_choice = False
+        
+        # Player specific resources
+        self.hints_white = 0
+        self.hints_black = 0
+        self.undos_white = 0
+        self.undos_black = 0
 
         # --- Sounds (Synthesized) ---
         self.sounds = self.create_sounds()
@@ -130,6 +139,11 @@ class ChessGame:
             
         self.hints_left = self.max_hints
         self.undos_left = self.max_undos
+        self.hints_white = self.max_hints
+        self.hints_black = self.max_hints
+        self.undos_white = self.max_undos
+        self.undos_black = self.max_undos
+        self.menu_transition_time = None
         
         if self.time_limit:
             self.white_time = self.time_limit
@@ -189,7 +203,7 @@ class ChessGame:
         difficulty_selected = False
         while not difficulty_selected:
             self.screen.fill(self.current_theme["bg"])
-            self.draw_text_centered("ANTIGRAVITY CHESS", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 6)
+            self.draw_text_centered("CHESS BOT", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 6)
             buttons = [("Easy AI", "easy"), ("Medium AI", "medium"), ("Hard AI", "hard"), ("Extra Hard", "absolute"), ("Friend", "friend")]
             mouse_pos = pygame.mouse.get_pos()
             for i, (text, mode) in enumerate(buttons):
@@ -325,40 +339,57 @@ class ChessGame:
 
     def draw_game(self):
         theme = self.current_theme
+        mouse_pos = pygame.mouse.get_pos()
         self.screen.fill(theme["bg"])
         self.draw_board()
         self.draw_highlights()
         self.draw_pieces()
+
         if self.board.is_check():
             ks = self.board.king(self.board.turn)
             if ks:
                 x, y = self.get_square_center(ks)
                 pygame.draw.rect(self.screen, (255, 0, 0, 100), (x - 30, y - 30, 60, 60), 3)
-                # Pulse "CHECK!" text
-                alpha = int(127 + 127 * abs(pygame.time.get_ticks() % 1000 - 500) / 500)
                 self.draw_text_centered("CHECK!", self.font_menu, (255, 50, 50), WIDTH // 2, OFFSET_Y // 2)
 
-        # Move Hints and Undos UP (near timers)
-        self.draw_text_centered(f"Hints: {self.hints_left}", self.font_small, theme["text"], 80, 55)
-        self.draw_text_centered(f"Undos: {self.undos_left}", self.font_small, theme["text"], WIDTH - 80, 55)
-
-        # Timers
+        # Timers (Always show)
         if self.time_limit:
             self.draw_text_centered(f"B: {int(self.black_time//60):02}:{int(self.black_time%60):02}", self.font_small, theme["text"], 80, 25)
             self.draw_text_centered(f"W: {int(self.white_time//60):02}:{int(self.white_time%60):02}", self.font_small, theme["text"], WIDTH - 80, 25)
 
-        # Buttons - 5 buttons now
-        mouse_pos = pygame.mouse.get_pos()
-        sound_text = "Sound: On" if self.sound_enabled else "Sound: Off"
-        # Adjusted positions to fit 5 buttons
-        btns = [("Menu", 55, 80), ("Hint", 150, 80), ("Theme", 250, 80), (sound_text, 350, 80), ("Undo", 445, 80)]
-        for text, cx, w in btns:
-            rect = pygame.Rect(cx - w // 2, HEIGHT - 55, w, 40)
+        # UI Elements
+        if self.difficulty != "friend":
+            self.draw_text_centered(f"Hints: {self.hints_left}", self.font_small, theme["text"], 80, 55)
+            self.draw_text_centered(f"Undos: {self.undos_left}", self.font_small, theme["text"], WIDTH - 80, 55)
+            self.draw_button_row(HEIGHT - 55)
+        else:
+            # Only Resign button for Friends
+            rect = pygame.Rect(WIDTH // 2 - 50, HEIGHT - 55, 100, 40)
             color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
             pygame.draw.rect(self.screen, color, rect, border_radius=10)
-            # Use smaller font for buttons if needed
-            self.draw_text_centered(text, pygame.font.SysFont("segoe ui", 16), COLOR_TEXT_WHITE, cx, HEIGHT - 35)
-            
+            self.draw_text_centered("Resign", pygame.font.SysFont("segoe ui", 16), COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT - 35)
+
+        # Undo Error Message
+        if pygame.time.get_ticks() < self.undo_msg_time:
+            self.draw_text_centered("All of the Pieces are on their places", self.font_small, (255, 100, 100), WIDTH // 2, HEIGHT - 85)
+
+        # Friend Resign Overlay
+        if self.friend_resign_choice:
+            s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+            s.fill((0, 0, 0, 180)); self.screen.blit(s, (0,0))
+            self.draw_text_centered("Who is Resigning?", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 - 80)
+            btns = [("White", WIDTH // 2 - 80, chess.WHITE), ("Black", WIDTH // 2 + 80, chess.BLACK)]
+            for text, cx, side in btns:
+                r = pygame.Rect(cx - 60, HEIGHT // 2, 120, 50)
+                c = COLOR_BUTTON_HOVER if r.collidepoint(mouse_pos) else COLOR_BUTTON
+                pygame.draw.rect(self.screen, c, r, border_radius=10)
+                self.draw_text_centered(text, self.font_small, COLOR_TEXT_WHITE, cx, HEIGHT // 2 + 25)
+                if pygame.mouse.get_pressed()[0] and r.collidepoint(mouse_pos):
+                    self.board.turn = side # Set turn so winner logic works correctly
+                    self.game_over = True; self.winner = "Resigned"; self.play_sound('click')
+                    self.menu_transition_time = pygame.time.get_ticks() + 2000
+                    self.friend_resign_choice = False
+        # Dragging piece visualization
         if self.dragging and self.selected_square:
             piece = self.board.piece_at(self.selected_square)
             if piece:
@@ -367,25 +398,52 @@ class ChessGame:
         if self.game_over:
             s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
             s.fill((0, 0, 0, 220)); self.screen.blit(s, (0,0))
-            self.draw_text_centered("GAME OVER", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 100)
-            reason = "Reason Unknown"
-            if self.board.is_checkmate(): reason = "Checkmate!"
-            elif self.board.is_stalemate(): reason = "Stalemate!"
-            elif self.board.is_insufficient_material(): reason = "Insufficient Material"
-            elif self.board.is_fivefold_repetition(): reason = "Repetition"
-            elif self.winner: reason = self.winner # For resignation/timeout
             
-            self.draw_text_centered(reason, self.font_menu, (255, 255, 0), WIDTH // 2, HEIGHT // 2 - 40)
+            if self.winner == "Resigned":
+                if self.difficulty != "friend":
+                    self.draw_text_centered("YOU LOST", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 100)
+                    self.draw_text_centered("OPPONENT WINS!", self.font_menu, (50, 255, 50), WIDTH // 2, HEIGHT // 2 - 40)
+                else:
+                    loser = "WHITE" if self.board.turn == chess.WHITE else "BLACK"
+                    winner = "BLACK" if self.board.turn == chess.WHITE else "WHITE"
+                    self.draw_text_centered(f"{loser} RESIGNED", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 100)
+                    self.draw_text_centered(f"{winner} WINS!", self.font_menu, (50, 255, 50), WIDTH // 2, HEIGHT // 2 - 40)
+            else:
+                self.draw_text_centered("GAME OVER", self.font_large, (255, 50, 50), WIDTH // 2, HEIGHT // 2 - 100)
+                reason = "Reason Unknown"
+                if self.board.is_checkmate(): reason = "Checkmate!"
+                elif self.board.is_stalemate(): reason = "Stalemate!"
+                elif self.board.is_insufficient_material(): reason = "Insufficient Material"
+                elif self.winner: reason = self.winner
+                self.draw_text_centered(reason, self.font_menu, (255, 255, 0), WIDTH // 2, HEIGHT // 2 - 40)
+
             self.draw_text_centered(f"Rounds: {len(self.board.move_stack)//2}", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 20)
             
-            # Interactive Restart Button
-            restart_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 50)
-            color = COLOR_BUTTON_HOVER if restart_rect.collidepoint(mouse_pos) else COLOR_BUTTON
-            pygame.draw.rect(self.screen, color, restart_rect, border_radius=12)
-            self.draw_text_centered("PLAY AGAIN", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 85)
-            
-            if pygame.mouse.get_pressed()[0] and restart_rect.collidepoint(mouse_pos):
-                self.reset_game()
+            if self.menu_transition_time is None:
+                restart_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 50)
+                color = COLOR_BUTTON_HOVER if restart_rect.collidepoint(mouse_pos) else COLOR_BUTTON
+                pygame.draw.rect(self.screen, color, restart_rect, border_radius=12)
+                self.draw_text_centered("PLAY AGAIN", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 85)
+                if pygame.mouse.get_pressed()[0] and restart_rect.collidepoint(mouse_pos):
+                    self.reset_game()
+
+    def draw_button_row(self, y_top, is_top_row=False):
+        mouse_pos = pygame.mouse.get_pos()
+        sound_text = "Sound: On" if self.sound_enabled else "Sound: Off"
+        
+        # In friend mode, top buttons are for Black, bottom for White (normally)
+        # But we'll just allow both to use them.
+        btns = [("Resign", 55, 80), ("Hint", 150, 80), ("Theme", 250, 80), (sound_text, 350, 80), ("Undo", 445, 80)]
+        if is_top_row:
+            # Drop Theme from top row as requested
+            btns = [("Resign", 70, 90), ("Hint", 185, 90), (sound_text, 315, 90), ("Undo", 430, 90)]
+
+        for text, cx, w in btns:
+            rect = pygame.Rect(cx - w // 2, y_top, w, 40)
+            color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
+            pygame.draw.rect(self.screen, color, rect, border_radius=10)
+            self.draw_text_centered(text, pygame.font.SysFont("segoe ui", 16), COLOR_TEXT_WHITE, cx, y_top + 20)
+        return btns
 
     def run(self):
         in_menu = True
@@ -404,17 +462,25 @@ class ChessGame:
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                if self.menu_transition_time and pygame.time.get_ticks() >= self.menu_transition_time:
+                    in_menu = True; self.menu_transition_time = None; continue
+
                 if not self.game_over and self.animating_move is None and self.undo_stack_count == 0:
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         pos = pygame.mouse.get_pos()
-                        # UI Click handle
-                        if pos[1] > HEIGHT - 60:
-                            # Menu (cx=55, w=80)
+                        # --- CLICK LOGIC: BUTTONS (AI Mode Only) ---
+                        if self.difficulty != "friend" and pos[1] > HEIGHT - 60:
+                            # Resign (cx=55, w=80)
                             if 15 < pos[0] < 95: 
                                 self.game_over = True; self.winner = "Resigned"; self.play_sound('click')
+                                self.menu_transition_time = pygame.time.get_ticks() + 2000
                             # Hint (cx=150, w=80) 
-                            elif 110 < pos[0] < 190 and self.hints_left > 0:
-                                self.hints_left -= 1; self.hint_move = self.ai.get_move(self.board) if self.ai else None; self.play_sound('click')
+                            elif 110 < pos[0] < 190:
+                                count = self.hints_left
+                                if count > 0:
+                                    self.hints_left -= 1
+                                    self.hint_move = self.ai.get_move(self.board) if self.ai else ChessBot("hard").get_move(self.board)
+                                    self.play_sound('click')
                             # Theme (cx=250, w=80)
                             elif 210 < pos[0] < 290:
                                 self.current_theme_idx = (self.current_theme_idx + 1) % len(self.theme_order)
@@ -423,8 +489,20 @@ class ChessGame:
                             elif 310 < pos[0] < 390:
                                 self.sound_enabled = not self.sound_enabled; self.play_sound('click')
                             # Undo (cx=445, w=80)
-                            elif 405 < pos[0] < 485 and self.undos_left > 0:
-                                self.undos_left -= 1; self.undo_stack_count = 2 if self.ai else 1; self.trigger_next_undo(); self.play_sound('click')
+                            elif 405 < pos[0] < 485:
+                                if len(self.board.move_stack) == 0:
+                                    self.undo_msg_time = pygame.time.get_ticks() + 2000
+                                else:
+                                    count = self.undos_left
+                                    if count > 0:
+                                        self.undos_left -= 1
+                                        self.undo_stack_count = 2 if self.ai else 1; self.trigger_next_undo(); self.play_sound('click')
+                            continue
+                        
+                        # --- CLICK LOGIC: Friend Resign ---
+                        if self.difficulty == "friend" and pos[1] > HEIGHT - 60:
+                            if WIDTH // 2 - 50 < pos[0] < WIDTH // 2 + 50:
+                                self.friend_resign_choice = not self.friend_resign_choice; self.play_sound('click')
                             continue
                         sq = self.get_square_from_mouse(pos)
                         if sq is not None:

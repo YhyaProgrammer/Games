@@ -3,6 +3,8 @@ import sys
 import chess
 import random
 from chess_ai import ChessBot
+import threading
+import queue
 
 # --- Constants ---
 WIDTH, HEIGHT = 500, 600  # More compact window
@@ -47,10 +49,10 @@ class ChessGame:
         self.game_over = False
         self.winner = None
         
-        self.hints_left = 10
-        self.undos_left = 10
-        self.max_hints = 10
-        self.max_undos = 10
+        self.hints_left = 5
+        self.undos_left = 5
+        self.max_hints = 5
+        self.max_undos = 5
         self.hint_move = None
         
         self.time_limit = None 
@@ -70,6 +72,14 @@ class ChessGame:
         self.hints_black = 0
         self.undos_white = 0
         self.undos_black = 0
+        self.game_over_timer = None # For auto-menu redirect
+        self.ai_thread = None
+        self.ai_queue = queue.Queue()
+        
+        # --- Option 5: Polish State ---
+        self.shake_amount = 0
+        self.particles = []
+        self.promotion_choice_move = None
 
         # --- Sounds (Synthesized) ---
         self.sounds = self.create_sounds()
@@ -109,9 +119,45 @@ class ChessGame:
             sounds['capture'] = make_beep(300, 0.15)
             sounds['check'] = make_beep(600, 0.2)
             sounds['click'] = make_beep(800, 0.05)
+            # New Sounds
+            sounds['clink'] = make_beep(1200, 0.1)
+            # Simple jingles for victory/defeat
+            def make_jingle(freqs, durs):
+                chunks = [make_beep(f, d) for f, d in zip(freqs, durs)]
+                # Since we can't easily concatenate Sound objects, we'll just define the first note for now
+                return chunks[0]
+            sounds['victory'] = make_beep(880, 0.5)
+            sounds['defeat'] = make_beep(220, 0.5)
         except:
             print("Sound synthesis failed, continuing without sound.")
         return sounds
+
+    def spawn_particles(self, x, y, color):
+        for _ in range(20):
+            self.particles.append({
+                "pos": [x, y],
+                "vel": [random.uniform(-4, 4), random.uniform(-4, 4)],
+                "life": 255,
+                "color": color
+            })
+
+    def trigger_shake(self, amount=10):
+        self.shake_amount = amount
+
+    def update_effects(self):
+        # Shake decay
+        if self.shake_amount > 0:
+            self.shake_amount *= 0.8
+            if self.shake_amount < 1: self.shake_amount = 0
+            
+        # Particle update
+        for p in self.particles[:]:
+            p["pos"][0] += p["vel"][0]
+            p["pos"][1] += p["vel"][1]
+            p["vel"][1] += 0.2 # Gravity
+            p["life"] -= 10
+            if p["life"] <= 0:
+                self.particles.remove(p)
 
     def play_sound(self, name):
         if self.sound_enabled and name in self.sounds:
@@ -126,16 +172,10 @@ class ChessGame:
         self.undo_stack_count = 0
         self.hint_move = None
         
-        if self.difficulty == "easy":
-            self.max_hints = 10; self.max_undos = 10
-        elif self.difficulty == "medium":
-            self.max_hints = 8; self.max_undos = 8
-        elif self.difficulty == "hard":
-            self.max_hints = 4; self.max_undos = 4
-        elif self.difficulty == "absolute": # This acts as Extra Hard
-            self.max_hints = 2; self.max_undos = 2
+        if self.difficulty == "friend":
+            self.max_hints = 0; self.max_undos = 0
         else:
-            self.max_hints = 10; self.max_undos = 10
+            self.max_hints = 5; self.max_undos = 5
             
         self.hints_left = self.max_hints
         self.undos_left = self.max_undos
@@ -144,6 +184,9 @@ class ChessGame:
         self.undos_white = self.max_undos
         self.undos_black = self.max_undos
         self.menu_transition_time = None
+        self.game_over_timer = None
+        self.ai_thread = None
+        while not self.ai_queue.empty(): self.ai_queue.get()
         
         if self.time_limit:
             self.white_time = self.time_limit
@@ -255,11 +298,16 @@ class ChessGame:
 
     def draw_board(self):
         theme = self.current_theme
+        # Coordinates font
+        font_coords = pygame.font.SysFont("segoe ui", 14, bold=True)
+        
         for r in range(8):
             for c in range(8):
                 color = theme["light"] if (r + c) % 2 == 1 else theme["dark"]
                 rect = pygame.Rect(OFFSET_X + c * SQUARE_SIZE, OFFSET_Y + (7 - r) * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE)
                 pygame.draw.rect(self.screen, color, rect)
+                
+                # Highlight last move
                 if self.board.move_stack:
                     last_move = self.board.peek()
                     logical_c = c; logical_r = r
@@ -268,8 +316,23 @@ class ChessGame:
                     sq_idx = chess.square(logical_c, logical_r)
                     if sq_idx == last_move.from_square or sq_idx == last_move.to_square:
                          s = pygame.Surface((SQUARE_SIZE, SQUARE_SIZE), pygame.SRCALPHA)
-                         s.fill(COLOR_HIGHLIGHT)
+                         # --- Breathing Effect for Last Move ---
+                         pulse = (pygame.time.get_ticks() % 1000) / 1000.0
+                         alpha = 60 + 40 * abs(0.5 - pulse) * 2 # Glow intensity shifts
+                         s.fill((*COLOR_HIGHLIGHT[:3], int(alpha)))
                          self.screen.blit(s, rect.topleft)
+
+        # Draw Labels (A-H, 1-8)
+        files = ['A','B','C','D','E','F','G','H']
+        ranks = ['1','2','3','4','5','6','7','8']
+        if self.player_color == chess.BLACK:
+            files.reverse(); ranks.reverse()
+            
+        for i in range(8):
+            # Files (Bottom)
+            self.draw_text_centered(files[i], font_coords, theme["text"], OFFSET_X + i * SQUARE_SIZE + SQUARE_SIZE//2, OFFSET_Y + BOARD_SIZE + 15)
+            # Ranks (Left)
+            self.draw_text_centered(ranks[7-i], font_coords, theme["text"], OFFSET_X - 15, OFFSET_Y + i * SQUARE_SIZE + SQUARE_SIZE//2)
 
     def trigger_next_undo(self):
         if self.undo_stack_count > 0 and len(self.board.move_stack) > 0:
@@ -340,16 +403,42 @@ class ChessGame:
     def draw_game(self):
         theme = self.current_theme
         mouse_pos = pygame.mouse.get_pos()
+        
+        # Apply Screen Shake
+        shake_x = random.randint(int(-self.shake_amount), int(self.shake_amount))
+        shake_y = random.randint(int(-self.shake_amount), int(self.shake_amount))
+        
+        # Draw game with shake offset if active
         self.screen.fill(theme["bg"])
+        
+        # Temp surface for board + pieces to apply shake
+        game_surf = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        # Instead of a full surface (expensive), we'll just offset the coordinates
+        
+        # Draw Board & UI
         self.draw_board()
         self.draw_highlights()
         self.draw_pieces()
+        
+        # Render Particles
+        for p in self.particles:
+            s = pygame.Surface((4,4))
+            s.fill(p["color"])
+            s.set_alpha(p["life"])
+            self.screen.blit(s, p["pos"])
 
         if self.board.is_check():
             ks = self.board.king(self.board.turn)
-            if ks:
+            if ks is not None:
                 x, y = self.get_square_center(ks)
-                pygame.draw.rect(self.screen, (255, 0, 0, 100), (x - 30, y - 30, 60, 60), 3)
+                # --- Pulse Glow Effect for King ---
+                pulse = (pygame.time.get_ticks() % 1000) / 500.0
+                radius = SQUARE_SIZE // 2 + 5 * abs(1 - pulse)
+                glow_surf = pygame.Surface((radius*2, radius*2), pygame.SRCALPHA)
+                for r_glow in range(int(radius), 0, -2):
+                    alpha = int(150 * (1 - r_glow/radius))
+                    pygame.draw.circle(glow_surf, (255, 0, 0, alpha), (radius, radius), r_glow)
+                self.screen.blit(glow_surf, (x - radius, y - radius))
                 self.draw_text_centered("CHECK!", self.font_menu, (255, 50, 50), WIDTH // 2, OFFSET_Y // 2)
 
         # Timers (Always show)
@@ -387,7 +476,8 @@ class ChessGame:
                 if pygame.mouse.get_pressed()[0] and r.collidepoint(mouse_pos):
                     self.board.turn = side # Set turn so winner logic works correctly
                     self.game_over = True; self.winner = "Resigned"; self.play_sound('click')
-                    self.menu_transition_time = pygame.time.get_ticks() + 2000
+                    self.game_over_timer = pygame.time.get_ticks()
+                    self.menu_transition_time = pygame.time.get_ticks() + 3000
                     self.friend_resign_choice = False
         # Dragging piece visualization
         if self.dragging and self.selected_square:
@@ -417,8 +507,6 @@ class ChessGame:
                 elif self.winner: reason = self.winner
                 self.draw_text_centered(reason, self.font_menu, (255, 255, 0), WIDTH // 2, HEIGHT // 2 - 40)
 
-            self.draw_text_centered(f"Rounds: {len(self.board.move_stack)//2}", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 20)
-            
             if self.menu_transition_time is None:
                 restart_rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + 60, 200, 50)
                 color = COLOR_BUTTON_HOVER if restart_rect.collidepoint(mouse_pos) else COLOR_BUTTON
@@ -426,6 +514,32 @@ class ChessGame:
                 self.draw_text_centered("PLAY AGAIN", self.font_small, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 + 85)
                 if pygame.mouse.get_pressed()[0] and restart_rect.collidepoint(mouse_pos):
                     self.reset_game()
+
+        # Promotion Choice Overlay
+        if self.promotion_choice_move:
+            self.draw_promotion_selector()
+
+    def draw_promotion_selector(self):
+        mouse_pos = pygame.mouse.get_pos()
+        s = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        s.fill((0, 0, 0, 200)); self.screen.blit(s, (0,0))
+        
+        self.draw_text_centered("Select Promotion Piece", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 2 - 100)
+        
+        pieces = [("♛", chess.QUEEN), ("♜", chess.ROOK), ("♝", chess.BISHOP), ("♞", chess.KNIGHT)]
+        for i, (char, p_type) in enumerate(pieces):
+            rect = pygame.Rect(WIDTH // 2 - 140 + i * 75, HEIGHT // 2 - 30, 60, 60)
+            color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
+            pygame.draw.rect(self.screen, color, rect, border_radius=10)
+            self.draw_text_centered(char, self.font_large, COLOR_TEXT_WHITE, rect.centerx, rect.centery)
+            
+            if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse_pos):
+                move = self.promotion_choice_move
+                move.promotion = p_type
+                self.animating_move = (move, pygame.time.get_ticks(), 300, UNICODE_PIECES[self.board.piece_at(move.from_square).symbol()], self.board.turn, False)
+                self.promotion_choice_move = None
+                self.play_sound('clink')
+                pygame.time.delay(150)
 
     def draw_button_row(self, y_top, is_top_row=False):
         mouse_pos = pygame.mouse.get_pos()
@@ -450,6 +564,7 @@ class ChessGame:
         ai_thinking_start = None
         while True:
             self.clock.tick(60)
+            self.update_effects()
             if in_menu:
                 if self.draw_menu() == False: in_menu = False; self.last_time_update = pygame.time.get_ticks()
                 continue
@@ -473,7 +588,8 @@ class ChessGame:
                             # Resign (cx=55, w=80)
                             if 15 < pos[0] < 95: 
                                 self.game_over = True; self.winner = "Resigned"; self.play_sound('click')
-                                self.menu_transition_time = pygame.time.get_ticks() + 2000
+                                self.game_over_timer = pygame.time.get_ticks()
+                                self.menu_transition_time = pygame.time.get_ticks() + 3000
                             # Hint (cx=150, w=80) 
                             elif 110 < pos[0] < 190:
                                 count = self.hints_left
@@ -514,23 +630,45 @@ class ChessGame:
                             elif self.selected_square is not None:
                                 move = next((m for m in self.legal_moves if m.to_square == sq), None)
                                 if move:
-                                    if move.promotion: move.promotion = chess.QUEEN
-                                    self.animating_move = (move, pygame.time.get_ticks(), 300, UNICODE_PIECES[self.board.piece_at(move.from_square).symbol()], self.board.turn, False)
+                                    if move.promotion:
+                                        self.promotion_choice_move = move
+                                    else:
+                                        self.animating_move = (move, pygame.time.get_ticks(), 300, UNICODE_PIECES[self.board.piece_at(move.from_square).symbol()], self.board.turn, False)
                                     self.selected_square = None; self.dragging = False; self.legal_moves = []
                     elif event.type == pygame.MOUSEBUTTONUP and self.dragging:
                         sq = self.get_square_from_mouse(pygame.mouse.get_pos())
                         if sq is not None:
                             move = next((m for m in self.legal_moves if m.to_square == sq), None)
                             if move:
-                                if move.promotion: move.promotion = chess.QUEEN
-                                self.board.push(move)
-                                if self.board.is_checkmate(): self.game_over = True
-                                elif self.board.is_check(): self.play_sound('check')
-                                elif self.board.is_capture(move): self.play_sound('capture')
-                                else: self.play_sound('move')
-                                if self.board.is_game_over(): self.game_over = True
+                                if move.promotion:
+                                    self.promotion_choice_move = move
+                                else:
+                                    if self.board.is_capture(move):
+                                        cx, cy = self.get_square_center(move.to_square)
+                                        self.spawn_particles(cx, cy, (255, 50, 50))
+                                        self.trigger_shake(12)
+                                        self.play_sound('capture')
+                                    else:
+                                        self.play_sound('move')
+                                    self.board.push(move)
+                                    if self.board.is_checkmate(): self.game_over = True
+                                    elif self.board.is_check(): self.play_sound('check')
+                                    if self.board.is_game_over(): 
+                                        self.game_over = True
+                                        self.game_over_timer = pygame.time.get_ticks()
+                                        if self.board.is_checkmate():
+                                            if self.board.turn == self.player_color: self.play_sound('defeat')
+                                            else: self.play_sound('victory')
+                                        else:
+                                            self.play_sound('click')
                         self.selected_square = None; self.dragging = False; self.legal_moves = []
             
+            # Auto-Menu Redirect Logic (3 seconds)
+            if self.game_over and self.game_over_timer:
+                if pygame.time.get_ticks() - self.game_over_timer > 3000:
+                    in_menu = True
+                    self.game_over_timer = None
+
             if self.animating_move:
                 m, st, d, sym, col, undo = self.animating_move
                 if pygame.time.get_ticks() - st >= d:
@@ -538,20 +676,45 @@ class ChessGame:
                     if undo:
                         self.trigger_next_undo()
                     else:
-                        self.board.push(m)
-                        if self.board.is_checkmate(): self.game_over = True
-                        elif self.board.is_check(): self.play_sound('check')
-                        elif self.board.is_capture(m): self.play_sound('capture')
+                        if self.board.is_capture(m): 
+                            self.play_sound('capture')
+                            cx, cy = self.get_square_center(m.to_square)
+                            self.spawn_particles(cx, cy, (255, 50, 50))
+                            self.trigger_shake(12)
                         else: self.play_sound('move')
-                        if self.board.is_game_over(): self.game_over = True
+                        
+                        self.board.push(m)
+                        if self.board.is_check(): self.play_sound('check')
+                        if self.board.is_game_over(): 
+                            self.game_over = True
+                            self.game_over_timer = pygame.time.get_ticks()
+                            # Win/Loss Sound Logic
+                            if self.board.is_checkmate():
+                                if self.board.turn == self.player_color: self.play_sound('defeat')
+                                else: self.play_sound('victory')
+                            else:
+                                self.play_sound('click') # Draw or timeout sound
             elif not self.game_over and self.ai and self.board.turn != self.player_color:
-                if ai_thinking_start is None: ai_thinking_start = pygame.time.get_ticks()
-                if pygame.time.get_ticks() - ai_thinking_start >= 500:
-                    move = self.ai.get_move(self.board)
-                    if move: 
+                if self.ai_thread is None:
+                    # Start AI thinking in a separate thread to prevent "Not Responding"
+                    def ai_think_task(board, ai, q):
+                        move = ai.get_move(board)
+                        q.put(move)
+                    
+                    self.ai_thread = threading.Thread(target=ai_think_task, args=(self.board.copy(), self.ai, self.ai_queue))
+                    self.ai_thread.daemon = True
+                    self.ai_thread.start()
+                
+                # Check if AI is finished
+                try:
+                    move = self.ai_queue.get_nowait()
+                    if move:
                         if move.promotion: move.promotion = chess.QUEEN
                         self.animating_move = (move, pygame.time.get_ticks(), 500, UNICODE_PIECES[self.board.piece_at(move.from_square).symbol()], self.board.turn, False)
-                    ai_thinking_start = None
+                    self.ai_thread = None
+                except queue.Empty:
+                    pass # Still thinking... main loop continues to run!
+
             if self.game_over and pygame.key.get_pressed()[pygame.K_r]: self.reset_game()
             self.draw_game(); pygame.display.flip()
 

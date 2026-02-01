@@ -87,15 +87,14 @@ class ChessBot:
         if not legal_moves:
             return None
 
-        # Increase depths for a more challenging experience
+        # Adjusted depths for proper difficulty progression
         if self.level == "easy":
             return random.choice(legal_moves)
         elif self.level == "medium":
-            return self.minimax_root(board, depth=3, is_maximizing=board.turn)
+            return self.minimax_root(board, depth=2, is_maximizing=board.turn)
         elif self.level == "hard":
-            return self.minimax_root(board, depth=4, is_maximizing=board.turn)
+            return self.minimax_root(board, depth=3, is_maximizing=board.turn)
         elif self.level == "absolute":
-            # Absolute uses depth 4 but we could try 5 if pruning is aggressive enough
             return self.minimax_root(board, depth=4, is_maximizing=board.turn)
         else:
             return random.choice(legal_moves)

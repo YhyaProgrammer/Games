@@ -1,4 +1,4 @@
-# Antigravity Chess 🌌♟️
+# Chess Bot 🌌♟️
 
 A sleek, modern, and highly interactive Python Chess game powered by `Pygame` and the `python-chess` library. Featuring an advanced AI, multiple visual themes, and an animated undo system.
 

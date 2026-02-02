@@ -615,7 +615,9 @@ class ChessGame:
                 self.last_time_update = pygame.time.get_ticks()
                 if self.board.turn == chess.WHITE: self.white_time -= dt
                 else: self.black_time -= dt
-                if self.white_time <= 0 or self.black_time <= 0: self.game_over = True; self.winner = "Timeout"
+                if self.white_time <= 0 or self.black_time <= 0: 
+                    self.game_over = True; self.winner = "Timeout"
+                    self.game_over_timer = pygame.time.get_ticks()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT: pygame.quit(); sys.exit()

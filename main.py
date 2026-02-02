@@ -209,8 +209,20 @@ class ChessGame:
     def draw_time_menu(self):
         self.screen.fill(self.current_theme["bg"])
         self.draw_text_centered("Select Time Limit", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 6)
-        options = [("5 Min", 300), ("15 Min", 900), ("30 Min", 1800), ("No Time", None)]
+        
         mouse_pos = pygame.mouse.get_pos()
+        
+        # Back Button
+        back_rect = pygame.Rect(20, 20, 50, 40)
+        back_color = COLOR_BUTTON_HOVER if back_rect.collidepoint(mouse_pos) else COLOR_BUTTON
+        pygame.draw.rect(self.screen, back_color, back_rect, border_radius=8)
+        self.draw_text_centered("←", self.font_menu, COLOR_TEXT_WHITE, back_rect.centerx, back_rect.centery - 5)
+        if pygame.mouse.get_pressed()[0] and back_rect.collidepoint(mouse_pos):
+            self.play_sound('click')
+            pygame.time.delay(200)
+            return "back"
+
+        options = [("5 Min", 300), ("15 Min", 900), ("30 Min", 1800), ("No Time", None)]
         for i, (text, sec) in enumerate(options):
             rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 3 + i * 70, 200, 50)
             color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
@@ -227,8 +239,20 @@ class ChessGame:
     def draw_side_selection_menu(self):
         self.screen.fill(self.current_theme["bg"])
         self.draw_text_centered("Select Your Side", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 4)
-        options = [("White", chess.WHITE), ("Black", chess.BLACK)]
+        
         mouse_pos = pygame.mouse.get_pos()
+        
+        # Back Button
+        back_rect = pygame.Rect(20, 20, 50, 40)
+        back_color = COLOR_BUTTON_HOVER if back_rect.collidepoint(mouse_pos) else COLOR_BUTTON
+        pygame.draw.rect(self.screen, back_color, back_rect, border_radius=8)
+        self.draw_text_centered("←", self.font_menu, COLOR_TEXT_WHITE, back_rect.centerx, back_rect.centery - 5)
+        if pygame.mouse.get_pressed()[0] and back_rect.collidepoint(mouse_pos):
+            self.play_sound('click')
+            pygame.time.delay(200)
+            return "back"
+
+        options = [("White", chess.WHITE), ("Black", chess.BLACK)]
         for i, (text, val) in enumerate(options):
             rect = pygame.Rect(WIDTH // 2 - 100, HEIGHT // 2 + i * 70, 200, 50)
             color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
@@ -243,37 +267,57 @@ class ChessGame:
         return False
 
     def draw_menu(self):
-        difficulty_selected = False
-        while not difficulty_selected:
-            self.screen.fill(self.current_theme["bg"])
-            self.draw_text_centered("CHESS BOT", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 6)
-            buttons = [("Easy AI", "easy"), ("Medium AI", "medium"), ("Hard AI", "hard"), ("Extra Hard", "absolute"), ("Friend", "friend")]
-            mouse_pos = pygame.mouse.get_pos()
-            for i, (text, mode) in enumerate(buttons):
-                rect = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 3 + i * 65, 240, 50)
-                color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
-                pygame.draw.rect(self.screen, color, rect, border_radius=10)
-                self.draw_text_centered(text, self.font_small, COLOR_TEXT_WHITE, rect.centerx, rect.centery)
-                if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse_pos):
-                    self.difficulty = mode
-                    difficulty_selected = True
-                    self.play_sound('click')
-                    pygame.time.delay(200)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
-            pygame.display.flip()
-            self.clock.tick(60)
-        while not self.draw_time_menu():
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT: pygame.quit(); sys.exit()
-            self.clock.tick(60)
-        if self.difficulty != "friend":
-            while not self.draw_side_selection_menu():
+        # Menu States: 0 = Difficulty, 1 = Time, 2 = Side
+        menu_state = 0
+        while menu_state < 3:
+            if menu_state == 0:
+                self.screen.fill(self.current_theme["bg"])
+                self.draw_text_centered("CHESS BOT", self.font_menu, COLOR_TEXT_WHITE, WIDTH // 2, HEIGHT // 6)
+                buttons = [("Easy AI", "easy"), ("Medium AI", "medium"), ("Hard AI", "hard"), ("Extra Hard", "absolute"), ("Friend", "friend")]
+                mouse_pos = pygame.mouse.get_pos()
+                selection = None
+                for i, (text, mode) in enumerate(buttons):
+                    rect = pygame.Rect(WIDTH // 2 - 120, HEIGHT // 3 + i * 65, 240, 50)
+                    color = COLOR_BUTTON_HOVER if rect.collidepoint(mouse_pos) else COLOR_BUTTON
+                    pygame.draw.rect(self.screen, color, rect, border_radius=10)
+                    self.draw_text_centered(text, self.font_small, COLOR_TEXT_WHITE, rect.centerx, rect.centery)
+                    if pygame.mouse.get_pressed()[0] and rect.collidepoint(mouse_pos):
+                        selection = mode
+                        self.play_sound('click')
+                        pygame.time.delay(200)
+                if selection:
+                    self.difficulty = selection
+                    menu_state = 1
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                pygame.display.flip()
+                self.clock.tick(60)
+
+            elif menu_state == 1:
+                res = self.draw_time_menu()
+                if res == "back":
+                    menu_state = 0
+                elif res == True:
+                    if self.difficulty == "friend":
+                        menu_state = 3 # Skip side selection for friend mode
+                    else:
+                        menu_state = 2
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT: pygame.quit(); sys.exit()
                 self.clock.tick(60)
+
+            elif menu_state == 2:
+                res = self.draw_side_selection_menu()
+                if res == "back":
+                    menu_state = 1
+                elif res == True:
+                    menu_state = 3
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT: pygame.quit(); sys.exit()
+                self.clock.tick(60)
+
         self.reset_game()
-        return False 
+        return False
 
     def get_square_from_mouse(self, pos):
         x, y = pos
@@ -322,11 +366,9 @@ class ChessGame:
                          s.fill((*COLOR_HIGHLIGHT[:3], int(alpha)))
                          self.screen.blit(s, rect.topleft)
 
-        # Draw Labels (A-H, 1-8)
+        # Draw Labels (A-H, 1-8) - Stay standard
         files = ['A','B','C','D','E','F','G','H']
         ranks = ['1','2','3','4','5','6','7','8']
-        if self.player_color == chess.BLACK:
-            files.reverse(); ranks.reverse()
             
         for i in range(8):
             # Files (Bottom)

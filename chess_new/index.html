@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Master — Glassmorphic Edition</title>
+    <meta name="description"
+        content="A premium glassmorphic chess game with AI, multiple themes, and stunning effects.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <!-- Animated Background -->
+    <div class="bg-orbs">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <!-- ===== SCREEN: Main Menu ===== -->
+    <div id="screen-menu" class="screen active">
+        <div class="glass-card menu-card">
+            <div class="logo-area">
+                <div class="logo-icon">♚</div>
+                <h1 class="title-glow">Chess Master</h1>
+                <p class="subtitle">Glassmorphic Edition</p>
+            </div>
+            <div class="menu-buttons" id="difficulty-buttons">
+                <button class="glass-btn" data-difficulty="easy">
+                    <span class="diff-dot diff-easy"></span> Easy AI
+                </button>
+                <button class="glass-btn" data-difficulty="medium">
+                    <span class="diff-dot diff-medium"></span> Medium AI
+                </button>
+                <button class="glass-btn" data-difficulty="hard">
+                    <span class="diff-dot diff-hard"></span> Hard AI
+                </button>
+                <button class="glass-btn" data-difficulty="absolute">
+                    <span class="diff-dot diff-extreme"></span> Extra Hard
+                </button>
+                <button class="glass-btn" data-difficulty="friend">
+                    <span class="diff-dot diff-friend"></span> Play a Friend
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Time Selection ===== -->
+    <div id="screen-time" class="screen">
+        <div class="glass-card menu-card">
+            <button class="back-btn glass-btn-sm" id="time-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Back
+            </button>
+            <h2>⏱ Time Control</h2>
+            <div class="menu-buttons" id="time-buttons">
+                <button class="glass-btn" data-time="60">⚡ 1 Minute — Bullet</button>
+                <button class="glass-btn" data-time="300">🔥 5 Minutes — Blitz</button>
+                <button class="glass-btn" data-time="900">🕐 15 Minutes — Rapid</button>
+                <button class="glass-btn" data-time="1800">🏰 30 Minutes — Classical</button>
+                <button class="glass-btn" data-time="0">♾️ No Time Limit</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Side Selection ===== -->
+    <div id="screen-side" class="screen">
+        <div class="glass-card menu-card">
+            <button class="back-btn glass-btn-sm" id="side-back">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="15 18 9 12 15 6" />
+                </svg>
+                Back
+            </button>
+            <h2>Choose Your Side</h2>
+            <div class="side-buttons">
+                <button class="glass-btn side-btn" data-side="white">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg" alt="White King"
+                        class="side-preview">
+                    <span>White</span>
+                </button>
+                <button class="glass-btn side-btn" data-side="random">
+                    <div class="side-preview random-icon">🎲</div>
+                    <span>Random</span>
+                </button>
+                <button class="glass-btn side-btn" data-side="black">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg" alt="Black King"
+                        class="side-preview">
+                    <span>Black</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SCREEN: Game Board ===== -->
+    <div id="screen-game" class="screen">
+        <div class="game-layout">
+            <!-- Eval Bar -->
+            <div class="eval-bar-container" id="eval-bar-container">
+                <div class="eval-bar">
+                    <div class="eval-white" id="eval-white" style="height:50%"></div>
+                </div>
+                <span class="eval-score" id="eval-score">0.0</span>
+            </div>
+
+            <!-- Left / Main Column -->
+            <div class="game-main">
+                <!-- Opponent Bar -->
+                <div class="player-bar glass-panel" id="opponent-bar">
+                    <div class="player-left">
+                        <div class="player-avatar opponent-avatar">♚</div>
+                        <div class="player-details">
+                            <span class="player-name" id="opponent-name">Black</span>
+                            <div class="captured-pieces" id="opponent-captured"></div>
+                        </div>
+                    </div>
+                    <div class="player-right">
+                        <span class="material-adv" id="opponent-material"></span>
+                        <div class="timer-display" id="timer-opponent">--:--</div>
+                    </div>
+                </div>
+
+                <!-- Chess Board -->
+                <div class="board-wrapper" id="board-wrapper">
+                    <div class="rank-labels" id="rank-labels"></div>
+                    <div class="board-outer">
+                        <div class="board-container" id="board-container">
+                            <div id="chess-board" class="chess-board"></div>
+                            <svg id="arrow-svg" class="arrow-overlay"></svg>
+                            <canvas id="particles-canvas"></canvas>
+                        </div>
+                    </div>
+                    <div class="file-labels" id="file-labels"></div>
+                </div>
+
+                <!-- Player Bar -->
+                <div class="player-bar glass-panel" id="player-bar">
+                    <div class="player-left">
+                        <div class="player-avatar player-avatar-self">♔</div>
+                        <div class="player-details">
+                            <span class="player-name" id="player-name">White</span>
+                            <div class="captured-pieces" id="player-captured"></div>
+                        </div>
+                    </div>
+                    <div class="player-right">
+                        <span class="material-adv" id="player-material"></span>
+                        <div class="timer-display" id="timer-player">--:--</div>
+                    </div>
+                </div>
+
+                <!-- Status Message -->
+                <div class="status-bar" id="game-status"></div>
+
+                <!-- Action Buttons -->
+                <div class="action-bar glass-panel">
+                    <button class="action-btn" id="btn-resign" title="Resign">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                            <line x1="4" y1="22" x2="4" y2="15" />
+                        </svg>
+                        <span>Resign</span>
+                    </button>
+                    <button class="action-btn" id="btn-hint" title="Get Hint (H)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01" />
+                        </svg>
+                        <span>Hint</span>
+                    </button>
+                    <button class="action-btn" id="btn-undo" title="Undo (Ctrl+Z)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="1 4 1 10 7 10" />
+                            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                        </svg>
+                        <span>Undo (<em id="undos-count">15</em>)</span>
+                    </button>
+                    <button class="action-btn" id="btn-flip" title="Flip Board (F)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="17 1 21 5 17 9" />
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                            <polyline points="7 23 3 19 7 15" />
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+                        </svg>
+                        <span>Flip</span>
+                    </button>
+                    <button class="action-btn" id="btn-theme" title="Change Theme (T)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="5" />
+                            <path
+                                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                        </svg>
+                        <span id="theme-label">Classic</span>
+                    </button>
+                    <button class="action-btn" id="btn-sound" title="Toggle Sound (S)">
+                        <svg id="sound-icon" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        </svg>
+                        <span>Sound</span>
+                    </button>
+                    <button class="action-btn" id="btn-copy-fen" title="Copy Position (FEN)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        </svg>
+                        <span>FEN</span>
+                    </button>
+                    <button class="action-btn" id="btn-new-game" title="New Game (N)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        <span>New</span>
+                    </button>
+                </div>
+
+                <!-- Keyboard Shortcuts Hint -->
+                <div class="shortcuts-hint">
+                    <span>H</span> Hint &nbsp; <span>F</span> Flip &nbsp; <span>T</span> Theme &nbsp;
+                    <span>Ctrl+Z</span> Undo &nbsp; <span>N</span> New
+                </div>
+            </div>
+
+            <!-- Right Sidebar: Move History -->
+            <div class="sidebar glass-panel" id="sidebar">
+                <div class="sidebar-header">
+                    <h3>Move History</h3>
+                    <span class="move-counter" id="move-counter">0 moves</span>
+                </div>
+                <div class="move-list" id="move-list"></div>
+                <div class="sidebar-footer">
+                    <button class="glass-btn-sm" id="btn-copy-pgn" title="Copy PGN">📋 Copy PGN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== OVERLAY: Game Over ===== -->
+    <div id="overlay-gameover" class="overlay">
+        <div class="glass-card overlay-card gameover-card">
+            <div class="gameover-icon" id="gameover-icon">👑</div>
+            <h2 id="gameover-title" class="title-glow">Game Over</h2>
+            <p id="gameover-reason" class="gameover-reason"></p>
+            <p id="gameover-rounds" class="gameover-detail"></p>
+            <div class="gameover-stats" id="gameover-stats"></div>
+            <div class="gameover-timer-bar">
+                <div id="gameover-timer-fill" class="timer-fill"></div>
+            </div>
+            <p class="gameover-timer-text">Returning to menu in <span id="gameover-countdown">5</span>s</p>
+            <button class="glass-btn" id="btn-play-again">🔄 Play Again</button>
+        </div>
+    </div>
+
+    <!-- ===== OVERLAY: Promotion ===== -->
+    <div id="overlay-promotion" class="overlay">
+        <div class="glass-card overlay-card promotion-card">
+            <h2>Choose Promotion</h2>
+            <div class="promotion-options" id="promotion-options"></div>
+        </div>
+    </div>
+
+    <!-- ===== OVERLAY: Friend Resign ===== -->
+    <div id="overlay-resign" class="overlay">
+        <div class="glass-card overlay-card">
+            <h2>Who is Resigning?</h2>
+            <div class="resign-buttons">
+                <button class="glass-btn resign-btn" id="resign-white">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg" alt=""
+                        class="resign-icon"> White Resigns
+                </button>
+                <button class="glass-btn resign-btn" id="resign-black">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg" alt=""
+                        class="resign-icon"> Black Resigns
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
